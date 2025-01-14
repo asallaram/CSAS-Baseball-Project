@@ -21,7 +21,8 @@ The dataset used in this project is **`baseball.csv`**, which includes:
 - Player performance metrics (e.g., bat speed, swing length)
 - Game context (e.g., inning, outs, strikes, runners on base)
 - Derived metrics (e.g., deviance from average bat speed, run expectancies)
-- The csv file is attached to this repository.
+- The baseball.csv file can be found at https://statds.org/events/csas2025/challenge.html
+- It is recommended to rename the csv file to baseball to prevent errors in accessing it.
 
 ## Key Features
 - Statistical modeling of **bat speed** and **swing length** under the conditions mentioned above.
