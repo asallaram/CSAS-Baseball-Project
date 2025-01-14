@@ -1,0 +1,233 @@
+---
+title: "Baseball Project"
+author: "Abigail Mabe"
+date: "2025-01-12"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+baseball<-read.csv("baseball.csv")
+
+#creating a new variable in our dataset for specified condition named *condition*: binary indicator variable indicating runner on 3rd with less than 2 outs
+
+data <- baseball %>%
+  mutate(condition = ifelse(outs_when_up < 2 & (!is.na(on_3b)), 1, 0))
+
+#baseline filtering out of bunts/incorrectly recorded data
+#assuming > 40mph is reasonable to assume, removing NA values
+
+data <- data %>% 
+  filter(bat_speed > 40) %>%
+  filter(bat_speed != "NA")
+
+#create new variable for average bat speed of each player
+#create new variable for deviance of each swing compared to individual player's averages
+#create new variable that records the standard deviation of each player's bat speed
+#create new variable that indicates speed three standard deviations above and below a player's average bat speed
+
+data <- data %>%
+  group_by(player_name) %>%
+  mutate(avg_bat_speed = mean(bat_speed, na.rm = TRUE),
+         deviance = ifelse(!is.na(bat_speed), bat_speed - avg_bat_speed, NA),
+  sd_bat_speed = sd(bat_speed, na.rm = TRUE),
+  three_sd_above = avg_bat_speed + 3 * sd_bat_speed,
+ three_sd_below = avg_bat_speed - 3 * sd_bat_speed
+  )  %>%
+  ungroup()
+
+#filters out unreasonable outliers (laying outside the 3-standard deviation range) of each individual player's average bat speed.
+
+data <- data %>% filter(bat_speed < three_sd_above) %>% filter(bat_speed > three_sd_below)
+
+#modeling bat speed and swing length
+
+library(lme4)
+
+#utilizing (1 | player_name) as a random effect to account for player-to-player variability in bat_speed
+#allows us to more robustly observe the effect of the condition on bat speed
+
+bat_speed_model <- lmer(
+  bat_speed ~ condition + (1 | player_name), 
+  data = data 
+)
+
+#utilizing (1 | player_name) as a random effect to account for player-to-player variability in swing_length
+#allows us to more robustly observe the effect of the condition on swing length
+
+swing_length_model <- lmer(
+  swing_length ~ condition + (1 | player_name), 
+  data = data 
+)
+
+#read in results
+
+summary(bat_speed_model)
+summary(swing_length_model)
+
+#function to assist visualization in further steps
+
+create_circle <- function(center_x, center_y, radius, n_points = 100) {
+  theta <- seq(0, 2 * pi, length.out = n_points)
+  data.frame(
+    x = center_x + radius * cos(theta),
+    y = center_y + radius * sin(theta)
+  )
+}
+
+library(ggplot2)
+library(MASS)
+
+#will help us view the highest density of high run expectancies in the data
+
+filtered_data <- subset(data, delta_run_exp > 2.5)
+
+#pinpoint location of the highest density of run expectancies over 2.5
+
+density_estimate <- kde2d(
+  x = filtered_data$deviance, 
+  y = filtered_data$delta_run_exp, 
+  n = 100
+)
+
+#steps to create circle to assist visualization aid 
+
+max_density_idx <- which(density_estimate$z == max(density_estimate$z), arr.ind = TRUE)
+center_x <- density_estimate$x[max_density_idx[1]]
+center_y <- density_estimate$y[max_density_idx[2]]
+
+circle_data <- create_circle(center_x, center_y, radius = 0.5)
+
+#plots bat speed deviance against run expectancies, adding a circle to the location of the highest density of run expectancies of 2.5 -- allows us to visually determine strategy
+
+ggplot(data, aes(x = deviance, y = delta_run_exp, color = inning)) +
+  geom_point(alpha = 0.7) +  
+  geom_polygon(data = circle_data, aes(x = x, y = y), inherit.aes = FALSE, 
+               color = "red", fill = NA, size = 1) + 
+  labs(
+    title = "Relationship Between Bat Speed Deviance and Run Expectancy",
+    x = "Deviance from Average Bat Speed",
+    y = "Run Expectancy"
+  ) + # Preserve aspect ratio
+  theme_minimal()
+
+#view the bat speed plotted against location of the hit -- again, allows us to examine strategy possibilities
+
+ggplot(data, aes(x = hc_x, y = hc_y, color = bat_speed)) +
+  geom_point(alpha = 0.7, size = 3) +
+  scale_color_viridis_c(option = "plasma", name = "Bat Speed") + 
+  labs(
+    title = "Hit Coordinates Colored by Bat Speed",
+    x = "Hit Coordinate X (hc_x)",
+    y = "Hit Coordinate Y (hc_y)"
+  ) +
+  theme_minimal()
+
+#same plots, specified for condition (runner on 3rd, less than 2 outs)
+
+data3 <- data %>% filter(
+  outs_when_up < 2 & (!is.na(on_3b))
+)
+
+filtered_data3 <- subset(data3, delta_run_exp > 2.5)
+
+density_estimate3 <- kde2d(
+  x = filtered_data3$deviance, 
+  y = filtered_data3$delta_run_exp, 
+  n = 100
+)
+max_density_idx3 <- which(density_estimate3$z == max(density_estimate3$z), arr.ind = TRUE)
+center_x3 <- density_estimate3$x[max_density_idx3[1]]
+center_y3 <- density_estimate3$y[max_density_idx3[2]]
+
+circle_data3 <- create_circle(center_x3, center_y3, radius = 0.5)
+
+ggplot(data3, aes(x = deviance, y = delta_run_exp, color = inning)) +
+  geom_point(alpha = 0.7) +  
+  geom_polygon(data = circle_data3, aes(x = x, y = y), inherit.aes = FALSE, 
+               color = "red", fill = NA, size = 1) +
+  labs(
+    title = "Relationship Between Bat Speed Deviance and Run Expectancy",
+    x = "Deviance from Average Bat Speed",
+    y = "Run Expectancy"
+  ) + # Preserve aspect ratio
+  theme_minimal()
+
+ggplot(data3, aes(x = hc_x, y = hc_y, color = bat_speed)) +
+  geom_point(alpha = 0.7, size = 3) +
+  scale_color_viridis_c(option = "plasma", name = "Bat Speed") + 
+  labs(
+    title = "Hit Coordinates Colored by Bat Speed",
+    x = "Hit Coordinate X (hc_x)",
+    y = "Hit Coordinate Y (hc_y)"
+  ) +
+  theme_minimal()
+
+#same as above, for win expectancies
+
+#take absolute value, as win expectancies are negative for away teams
+
+data <- data %>% mutate(delta_home_win_exp = abs(delta_home_win_exp))
+
+filtered_data <- subset(data, delta_home_win_exp > .2)
+
+#pinpoint location of the highest density of win expectancies over .2
+
+density_estimate <- kde2d(
+  x = filtered_data$deviance, 
+  y = filtered_data$delta_home_win_exp, 
+  n = 100
+)
+
+#steps to create circle to assist visualization aid 
+
+max_density_idx <- which(density_estimate$z == max(density_estimate$z), arr.ind = TRUE)
+center_x <- density_estimate$x[max_density_idx[1]]
+center_y <- density_estimate$y[max_density_idx[2]]
+
+circle_data <- create_circle(center_x, center_y, radius = 0.3)
+
+#plots bat speed deviance against run expectancies, adding a circle to the location of the highest density of win expectancies of >.2 -- allows us to visually determine strategy
+
+ggplot(data, aes(x = deviance, y = delta_home_win_exp, color = inning)) +
+  geom_point(alpha = 0.7) +  
+  geom_polygon(data = circle_data, aes(x = x, y = y), inherit.aes = FALSE, 
+               color = "red", fill = NA, size = 1) + 
+  labs(
+    title = "Relationship Between Bat Speed Deviance and Run Expectancy",
+    x = "Deviance from Average Bat Speed",
+    y = "Run Expectancy"
+  ) + 
+  theme_minimal()
+
+#same plots, specified for condition (runner on 3rd, less than 2 outs)
+
+data3 <- data %>% filter(
+  outs_when_up < 2 & (!is.na(on_3b))
+)
+
+filtered_data3 <- subset(data3, delta_home_win_exp > .2)
+
+density_estimate3 <- kde2d(
+  x = filtered_data3$deviance, 
+  y = filtered_data3$delta_home_win_exp, 
+  n = 100
+)
+max_density_idx3 <- which(density_estimate3$z == max(density_estimate3$z), arr.ind = TRUE)
+center_x3 <- density_estimate3$x[max_density_idx3[1]]
+center_y3 <- density_estimate3$y[max_density_idx3[2]]
+
+circle_data3 <- create_circle(center_x3, center_y3, radius = 0.3)
+
+ggplot(data3, aes(x = deviance, y = delta_home_win_exp, color = inning)) +
+  geom_point(alpha = 0.7) +  
+  geom_polygon(data = circle_data3, aes(x = x, y = y), inherit.aes = FALSE, 
+               color = "red", fill = NA, size = 1) +
+  labs(
+    title = "Relationship Between Bat Speed Deviance and Win Expectancy",
+    x = "Deviance from Average Bat Speed",
+    y = "Run Expectancy"
+  ) + 
+  theme_minimal()
+```
+
