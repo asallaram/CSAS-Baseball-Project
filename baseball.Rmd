@@ -433,5 +433,28 @@ ggplot(data3, aes(x = deviance, y = delta_home_win_exp, color = inning)) +
     y = "Run Expectancy"
   ) + 
   theme_minimal()
+
+#Display contact for 2 strikes, runner on base
+data4 <- baseball %>% filter(
+  strikes == 2 & (!is.na(on_1b) | !is.na(on_2b) | !is.na(on_3b)))
+
+# Create a binary variable for contact
+data <- data4 %>%
+  mutate(contact = ifelse(type == "X", "Contact", "No Contact"))
+
+# Plot bat speed vs. contact
+library(ggplot2)
+ggplot(data, aes(x = bat_speed, fill = contact)) +
+  geom_density(alpha = 0.6) +
+  scale_fill_manual(
+    values = c("No Contact" = "lightblue", "Contact" = "blue")
+  )+
+  labs(
+    title = "Density of Bat Speed by Contact Made",
+    x = "Bat Speed",
+    y = "Density",
+    fill = "Contact"
+  ) +
+  theme_minimal()
 ```
 
